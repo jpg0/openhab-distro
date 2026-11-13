@@ -99,11 +99,10 @@ goto :https_port_done
 
 :https_port_done
 
-:: set the Java debug port with a wildcard, so that it is bound to all interfaces
-:: (java/karaf otherwise only binds it to localhost)
+:: set Java debug port
 :check_debug_port
 IF NOT [%OPENHAB_JAVA_DEBUG_PORT%] == [] GOTO :debug_port_set
-set JAVA_DEBUG_PORT=*:5005
+set JAVA_DEBUG_PORT=5005
 goto :debug_port_done
 
 :debug_port_set
@@ -112,7 +111,7 @@ goto :debug_port_done
 
 :debug_port_done
 
-:: set java options
+:: set Java options
 set JAVA_OPTS=%JAVA_OPTS% ^
   -Dopenhab.home=%OPENHAB_HOME% ^
   -Dopenhab.conf=%OPENHAB_CONF% ^
@@ -121,17 +120,16 @@ set JAVA_OPTS=%JAVA_OPTS% ^
   -Dopenhab.logdir=%OPENHAB_LOGDIR% ^
   -Dfelix.cm.dir=%OPENHAB_USERDATA%\config ^
   -Djava.library.path=%OPENHAB_USERDATA%\tmp\lib ^
+  -Djdk.util.zip.disableZip64ExtraFieldValidation=true ^
   -Djetty.host=%HTTP_ADDRESS% ^
   -Djetty.http.compliance=RFC2616 ^
-  -Dnashorn.args=--no-deprecation-warning ^
   -Dorg.apache.cxf.osgi.http.transport.disable=true ^
   -Dorg.ops4j.pax.web.listening.addresses=%HTTP_ADDRESS% ^
   -Dorg.osgi.service.http.port=%HTTP_PORT% ^
   -Dorg.osgi.service.http.port.secure=%HTTPS_PORT%
 
 :: set jvm options
-set EXTRA_JAVA_OPTS=-XX:+UseG1GC ^
-  -Djava.awt.headless=true ^
+set EXTRA_JAVA_OPTS=-Djava.awt.headless=true ^
   -Dfile.encoding=UTF-8 ^
   %EXTRA_JAVA_OPTS%
   

@@ -3,12 +3,15 @@
 .vscode
 .DS_Store
 *.iml
+*.log
+.gradle
 maven-metadata-local.xml
 Californium.properties
 
 .history/
 .metadata/
 bin/
+!./distributions/openhab/src/main/resources/bin/
 src-gen/
 target/
 xtend-gen/

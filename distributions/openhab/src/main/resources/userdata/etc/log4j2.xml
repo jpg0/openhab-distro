@@ -26,16 +26,6 @@
 			<DefaultRolloverStrategy max="7"/>
 		</RollingRandomAccessFile>
 
-		<!-- Audit file appender -->
-		<RollingRandomAccessFile fileName="${sys:openhab.logdir}/audit.log" filePattern="${sys:openhab.logdir}/audit.log.%i.gz" name="AUDIT">
-			<PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} [%-5.5p] [%-36.36c] - %m%n"/>
-			<Policies>
-				<OnStartupTriggeringPolicy/>
-				<SizeBasedTriggeringPolicy size="8 MB"/>
-			</Policies>
-			<DefaultRolloverStrategy max="7"/>
-		</RollingRandomAccessFile>
-
 		<!-- OSGi appender -->
 		<PaxOsgi filter="*" name="OSGI"/>
 	</Appenders>
@@ -52,16 +42,13 @@
 			<AppenderRef ref="STDOUT"/>
 		</Logger>
 
-		<!-- Security audit logger -->
-		<Logger additivity="false" level="INFO" name="org.apache.karaf.jaas.modules.audit">
-			<AppenderRef ref="AUDIT"/>
-		</Logger>
-
 		<!-- openHAB specific logger configuration -->
 
 		<Logger level="INFO" name="org.openhab"/>
 
 		<Logger level="ERROR" name="openhab.event.ItemStateEvent"/>
+		<Logger level="ERROR" name="openhab.event.ItemStateUpdatedEvent"/>
+		<Logger level="ERROR" name="openhab.event.GroupStateUpdatedEvent"/>
 		<Logger level="ERROR" name="openhab.event.ItemAddedEvent"/>
 		<Logger level="ERROR" name="openhab.event.ItemRemovedEvent"/>
 		<Logger level="ERROR" name="openhab.event.ItemChannelLinkAddedEvent"/>
@@ -103,6 +90,10 @@
 
 		<!-- Filters warnings for events that could not be delivered to a disconnected client. -->
 		<Logger level="ERROR" name="org.apache.cxf.jaxrs.sse.SseEventSinkImpl"/>
+
+		<!-- Filters warnings from broken connections during startup -->
+		<!-- https://github.com/openhab/openhab-core/issues/2998 -->
+		<Logger level="ERROR" name="org.apache.cxf.phase.PhaseInterceptorChain"/>
 
 		<!-- Filters known issues of KarServiceImpl, see -->
 		<!-- https://github.com/openhab/openhab-distro/issues/519#issuecomment-351944506 -->

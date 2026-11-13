@@ -24,6 +24,11 @@ set DIRNAME=%~dp0%
 set PROGNAME=%~nx0%
 set ARGS=%*
 
+rem cleanly display utf8 tables, chcp 65001
+rem this can be removed when fixed in jline
+chcp 65001 > nul
+rem as this is within the setlocal section, the change will be reverted on exit
+
 rem Sourcing environment settings for karaf similar to tomcats setenv
 
 if "%KARAF_SCRIPT%" == "" (
@@ -80,6 +85,97 @@ if "%KARAF_DATA%" == "" (
     set "KARAF_DATA=%KARAF_BASE%\data"
 )
 
+if "%~1"=="" goto AWAIT_CACHE_READY
+if /i "%~1"=="console" goto AWAIT_CACHE_READY
+goto AFTER_CACHE_READY
+
+:AWAIT_CACHE_READY
+set CACHE_FOLDER=%KARAF_DATA%\cache\org.eclipse.osgi
+if exist "%CACHE_FOLDER%\.*" goto AFTER_CACHE_READY
+
+if not exist "%DIRNAME%runhidden.vbs" (
+    call :warn Missing helper script: "%DIRNAME%runhidden.vbs"
+    goto END
+)
+
+set CACHE_REFRESH_LOCK=%KARAF_DATA%\cache-refresh-lock
+if exist "%CACHE_REFRESH_LOCK%" goto AFTER_CACHE_READY
+type nul > "%CACHE_REFRESH_LOCK%"
+echo Refreshing the cache...
+
+set STARTLEVEL_FILE=%KARAF_DATA%\openhab-start-level
+set STARTED_TARGET_LEVEL=10
+set STOPPED_TARGET_LEVEL=0
+> "%STARTLEVEL_FILE%" echo %STOPPED_TARGET_LEVEL%
+
+set RUNHIDDEN=wscript //nologo "%DIRNAME%runhidden.vbs"
+
+echo Starting server...
+set KARAF_HOME=
+%RUNHIDDEN% "%DIRNAME%karaf.bat" "server"
+setlocal EnableDelayedExpansion
+set SECONDS_WAITED=0
+
+:AWAIT_SERVER_STARTED
+set LEVEL=
+2>nul set /p LEVEL=<"%STARTLEVEL_FILE%"
+if defined LEVEL (
+    set /a LEVEL_A=LEVEL >nul 2>&1
+    if not errorlevel 1 (
+        if !LEVEL_A! GEQ %STARTED_TARGET_LEVEL% goto SERVER_STARTED
+    )
+)
+if !SECONDS_WAITED! GEQ 70 (
+    if not exist "%STARTLEVEL_FILE%" (
+        echo Wait timed out! .. missing start-level file %STARTLEVEL_FILE%
+        goto SERVER_STARTED
+    )
+    echo Wait timed out! .. did not reach start-level %STARTED_TARGET_LEVEL%
+    goto SERVER_STARTED
+)
+timeout /t 1 /nobreak >nul
+set /a SECONDS_WAITED=!SECONDS_WAITED!+1
+goto AWAIT_SERVER_STARTED
+
+:SERVER_STARTED
+endlocal
+
+echo Finalizing startup sequence...
+set KARAF_HOME=
+%RUNHIDDEN% "%DIRNAME%karaf.bat" "stop"
+setlocal EnableDelayedExpansion
+set SECONDS_WAITED=0
+
+:AWAIT_SERVER_STOPPED
+set LEVEL=
+2>nul set /p LEVEL=<"%STARTLEVEL_FILE%"
+if defined LEVEL (
+    set /a LEVEL_A=LEVEL >nul 2>&1
+    if not errorlevel 1 (
+        if !LEVEL_A! EQU %STOPPED_TARGET_LEVEL% goto SERVER_STOPPED
+    )
+)
+if !SECONDS_WAITED! GEQ 70 (
+    if not exist "%STARTLEVEL_FILE%" (
+        echo Wait timed out! .. missing start-level file %STARTLEVEL_FILE%
+        goto SERVER_STOPPED
+    )
+    echo Wait timed out! .. did not reach start-level %STOPPED_TARGET_LEVEL%
+    goto SERVER_STOPPED
+)
+timeout /t 1 /nobreak >nul
+set /a SECONDS_WAITED=!SECONDS_WAITED!+1
+goto AWAIT_SERVER_STOPPED
+
+:SERVER_STOPPED
+endLocal
+del "%CACHE_REFRESH_LOCK%" 2>nul
+set KARAF_HOME=
+"%~dp0karaf.bat" console
+exit /b %ERRORLEVEL%
+
+:AFTER_CACHE_READY
+
 if not "%KARAF_ETC%" == "" (
     if not exist "%KARAF_ETC%" (
         call :warn KARAF_ETC is not valid: "%KARAF_ETC%"
@@ -93,8 +189,8 @@ if "%KARAF_ETC%" == "" (
 set LOCAL_CLASSPATH=%CLASSPATH%
 
 set CLASSPATH=%LOCAL_CLASSPATH%;%KARAF_BASE%\conf
-set DEFAULT_JAVA_DEBUG_OPTS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005
-set DEFAULT_JAVA_DEBUGS_OPTS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=5005
+set DEFAULT_JAVA_DEBUG_OPTS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005
+set DEFAULT_JAVA_DEBUGS_OPTS=-agentlib:jdwp=transport=dt_socket,server=y,suspend=y,address=*:5005
 
 if "%LOCAL_CLASSPATH%" == "" goto :KARAF_CLASSPATH_EMPTY
     set CLASSPATH=%LOCAL_CLASSPATH%;%KARAF_BASE%\conf
@@ -212,6 +308,11 @@ if not "%JAVA%" == "" goto :Check_JAVA_END
 rem Retrieve java version
 for /f tokens^=2-5^ delims^=.-_+^" %%j in ('"%JAVA%" -fullversion 2^>^&1') do (
     if %%j==1 (set JAVA_VERSION=%%k) else (set JAVA_VERSION=%%j)
+)
+
+if %JAVA_VERSION% NEQ 21 (
+    call :warn "JVM must be version 21. JVM version %JAVA_VERSION% is unsupported (JAVA_HOME=%JAVA_HOME%)"
+    goto END
 )
 
 if %JAVA_VERSION% GTR 8 (
@@ -407,8 +508,8 @@ if "%KARAF_PROFILER%" == "" goto :RUN
             "%JAVA%" %JAVA_OPTS% %OPTS% ^
                 --add-reads=java.xml=java.logging ^
                 --add-exports=java.base/org.apache.karaf.specs.locator=java.xml,ALL-UNNAMED ^
-                --patch-module "java.base=%KARAF_HOME%/lib/endorsed/org.apache.karaf.specs.locator-4.3.6.jar" ^
-                --patch-module "java.xml=%KARAF_HOME%/lib/endorsed/org.apache.karaf.specs.java.xml-4.3.6.jar" ^
+                --patch-module java.base="%KARAF_HOME%\lib\endorsed\org.apache.karaf.specs.locator-4.4.12.jar" ^
+                --patch-module java.xml="%KARAF_HOME%\lib\endorsed\org.apache.karaf.specs.java.xml-4.4.12.jar" ^
                 --add-opens java.base/java.security=ALL-UNNAMED ^
                 --add-opens java.base/java.net=ALL-UNNAMED ^
                 --add-opens java.base/java.lang=ALL-UNNAMED ^
@@ -430,6 +531,7 @@ if "%KARAF_PROFILER%" == "" goto :RUN
                 --add-exports=jdk.naming.rmi/com.sun.jndi.url.rmi=ALL-UNNAMED ^
                 --add-exports=java.rmi/sun.rmi.registry=ALL-UNNAMED ^
                 --add-exports=java.security.sasl/com.sun.security.sasl=ALL-UNNAMED ^
+                --add-exports=java.naming/com.sun.jndi.ldap=ALL-UNNAMED ^
                 -classpath "%CLASSPATH%" ^
                 -Dkaraf.instances="%OPENHAB_USERDATA%\tmp\instances" ^
                 -Dkaraf.home="%KARAF_HOME%" ^

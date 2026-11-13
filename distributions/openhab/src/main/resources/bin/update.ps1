@@ -12,7 +12,7 @@ Set-StrictMode -Version Latest
     The version to upgrade to.
     .PARAMETER Snapshot
     DEPRECATED - Upgrade to a snapshot version ($true) or a release version ($false) (default: $false)
-    DEPRECATED - Please specify "-snapshot" in the OHVersion instead (ex: "3.0.0-SNAPSHOT")
+    DEPRECATED - Please specify "-snapshot" in the OHVersion instead (ex: "5.3.0-SNAPSHOT")
     .PARAMETER AutoConfirm
     Automatically confirm update (used for headless mode)
     .EXAMPLE
@@ -20,7 +20,7 @@ Set-StrictMode -Version Latest
     Update-openHAB
     .EXAMPLE
     Update the openHAB distribution in the C:\oh-snapshot directory to the next snapshot version
-    Update-openHAB -OHDirectory C:\oh-snapshot -OHVersion 3.0.0-SNAPSHOT
+    Update-openHAB -OHDirectory C:\oh-snapshot -OHVersion 5.3.0-SNAPSHOT
 #>
 
 ###########################################################################
@@ -384,6 +384,7 @@ Function Update-openHAB() {
 
     # Get current openHAB version
     $CurrentVersion = GetOpenHABVersion $OHUserData
+    $CurrentVersionName = $CurrentVersion
     if ($CurrentVersion -eq "") {
         exit PrintAndReturn "Can't get the current openhab version from $OHUserData\etc\version.properties"
     }
@@ -407,8 +408,8 @@ Function Update-openHAB() {
     
     # If the OHVersion parameter was not specified,
     #    If the current version is snapshot  - make OHVersion the same snapshot
-    #    If the current version is stable    - make OHVersion the next minor upgrade (current version 3.0.0 would make our OHversion 3.1.0)
-    #    If the current version is milestone - make OHVersion the stable version (3.1.0.M6 becomes 3.1.0)
+    #    If the current version is stable    - make OHVersion the next minor upgrade (current version 5.1.0 would make our OHversion 5.2.0)
+    #    If the current version is milestone - make OHVersion the stable version (5.2.0.M6 becomes 5.2.0)
     if (-Not $OHVersion) {
         if ($parts.Length -eq 3) {
             if ($parts[2].EndsWith("-SNAPSHOT", "CurrentCultureIgnoreCase")) {
@@ -491,8 +492,8 @@ Function Update-openHAB() {
 
     # Create the proper download URLs
     if ($Snapshot) {
-        $DownloadLocation="https://ci.openhab.org/job/openHAB3-Distribution/lastSuccessfulBuild/artifact/distributions/openhab/target/openhab-$OHVersionName.zip"
-        $AddonsDownloadLocation="https://ci.openhab.org/job/openHAB3-Distribution/lastSuccessfulBuild/artifact/distributions/openhab-addons/target/openhab-addons-$OHVersionName.kar"
+        $DownloadLocation="https://ci.openhab.org/job/openHAB-Distribution/lastSuccessfulBuild/artifact/distributions/openhab/target/openhab-$OHVersionName.zip"
+        $AddonsDownloadLocation="https://ci.openhab.org/job/openHAB-Distribution/lastSuccessfulBuild/artifact/distributions/openhab-addons/target/openhab-addons-$OHVersionName.kar"
     }
     elseif ($Milestone -ne "") {
         $DownloadLocation="https://www.openhab.org/download/milestones/org/openhab/distro/openhab/$OHVersionName/openhab-$OHVersionName.zip"
@@ -743,6 +744,13 @@ Function Update-openHAB() {
             return PrintAndThrow "Could not delete the $OHUserData\tmp directory" $_
         }
 
+        try {
+            Write-Host -ForegroundColor Cyan "Removing $OHUserData\marketplace"
+            DeleteIfExists "$OHUserData\marketplace" $True
+        } catch {
+            return PrintAndThrow "Could not delete the $OHUserData\marketplace directory" $_
+        }
+
         ############## STEP 4 - copy files from temporary to distribution WITHOUT replacement
         Write-Host -ForegroundColor Cyan "Copying $TempDistribution to $OHDirectory without overwriting existing ones"
         try {
@@ -789,7 +797,7 @@ Function Update-openHAB() {
 
         # If there's an existing addons file, we need to replace it with the correct version.
         try {
-            $AddonsFile = "$OHAddons\openhab-addons-$OHVersionName.kar"
+            $AddonsFile = "$OHAddons\openhab-addons-$CurrentVersionName.kar"
             if (Test-Path -Path $AddonsFile) {
                 Write-Host "Found an openHAB addons file, replacing with new version"
                 DeleteIfExists $AddonsFile
@@ -799,6 +807,14 @@ Function Update-openHAB() {
             return PrintAndThrow "Could not replace the $AddonsFile" $_
         }
 
+        # Now run the upgrade tool to update the JSON database
+        Write-Host "Starting JSON database update..."
+        java -jar "$OHRuntime\bin\upgradetool.jar"
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Update tool failed, please check the openHAB website (www.openhab.org) for manual update instructions."
+        exit 1
+        }
+        Write-Host "JSON database updated successfully."
 
         # Hop for joy - we did it!
         Write-Host -ForegroundColor Green "openHAB updated to version $OHVersionName!"

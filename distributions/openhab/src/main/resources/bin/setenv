@@ -84,16 +84,15 @@ else
     HTTPS_PORT=8443
 fi
 
-# set the Java debug port with a wildcard, so that it is bound to all interfaces
-# (java/karaf otherwise only binds it to localhost)
+# set Java debug port
 if [ ! -z ${OPENHAB_JAVA_DEBUG_PORT} ]; then
     JAVA_DEBUG_PORT=${OPENHAB_JAVA_DEBUG_PORT}
 else
-    JAVA_DEBUG_PORT="*:5005"
+    JAVA_DEBUG_PORT="5005"
 fi
 
 #
-# set java options
+# set Java options
 #
 
 export JAVA_OPTS="${JAVA_OPTS}
@@ -104,9 +103,9 @@ export JAVA_OPTS="${JAVA_OPTS}
   -Dopenhab.logdir=${OPENHAB_LOGDIR}
   -Dfelix.cm.dir=${OPENHAB_USERDATA}/config
   -Djava.library.path=${OPENHAB_USERDATA}/tmp/lib
+  -Djdk.util.zip.disableZip64ExtraFieldValidation=true
   -Djetty.host=${HTTP_ADDRESS}
   -Djetty.http.compliance=RFC2616
-  -Dnashorn.args=--no-deprecation-warning
   -Dorg.apache.cxf.osgi.http.transport.disable=true
   -Dorg.ops4j.pax.web.listening.addresses=${HTTP_ADDRESS}
   -Dorg.osgi.service.http.port=${HTTP_PORT}
@@ -115,17 +114,10 @@ export JAVA_OPTS="${JAVA_OPTS}
 #
 # set JVM options
 #
-ARCH=`uname -m`
 EXTRA_JAVA_OPTS_COMMON="
   -Djava.awt.headless=true
   -Dfile.encoding=UTF-8"
-EXTRA_JAVA_OPTS_ARCH=""
-case "$ARCH" in
-    *arm*) ;;
-  *aarch*) ;;
-        *) EXTRA_JAVA_OPTS_ARCH="-XX:+UseG1GC" ;;
-esac
-export EXTRA_JAVA_OPTS="${EXTRA_JAVA_OPTS_COMMON} ${EXTRA_JAVA_OPTS_ARCH} ${EXTRA_JAVA_OPTS}"
+export EXTRA_JAVA_OPTS="${EXTRA_JAVA_OPTS_COMMON} ${EXTRA_JAVA_OPTS}"
 export JAVA_NON_DEBUG_OPTS="-XX:-UsePerfData"
 
 
@@ -146,7 +138,7 @@ locateJava() {
     fi
 
     if [ "x${JAVA_HOME}" = "x" ] && [ "${darwin}" = "true" ]; then
-        JAVA_HOME="$(/usr/libexec/java_home -v 11)"
+        JAVA_HOME="$(/usr/libexec/java_home -v 21)"
     fi
     if [ "x${JAVA}" = "x" ] && [ -r /etc/gentoo-release ] ; then
         JAVA_HOME=$(java-config --jre-home)
